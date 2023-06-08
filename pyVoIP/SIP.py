@@ -952,7 +952,7 @@ class SIPClient:
         self.NSD = True
         self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # self.out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.s.bind((self.myIP, self.myPort))
+        self.s.bind(('0.0.0.0', self.myPort))
         self.out = self.s
         self.register()
         t = Timer(1, self.recv)
