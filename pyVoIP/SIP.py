@@ -364,6 +364,8 @@ class SIPMessage:
         return data
 
     def parse(self, data: bytes) -> None:
+        print("parse bytes")
+        print(data)
         try:
             headers, body = data.split(b"\r\n\r\n")
         except ValueError as ve:
@@ -453,7 +455,7 @@ class SIPMessage:
             self.headers[header] = data.split(", ")
         elif header == "Content-Length":
             self.headers[header] = int(data)
-        elif header == "WWW-Authenticate" or header == "Authorization":
+        elif header == "WWW-Authenticate" or header == "Authorization" or header == "Proxy-Authenticate":
             data = data.replace("Digest ", "")
             row_data = self.auth_match.findall(data)
             header_data = {}
@@ -739,9 +741,12 @@ class SIPMessage:
     ) -> None:
         if len(body) > 0:
             body_raw = body.split(b"\r\n")
+            print("raw body")
+            print(body_raw)
             for x in body_raw:
                 i = str(x, "utf8").split("=")
                 if i != [""]:
+                    print(i)
                     handle(i[0], i[1])
 
     def parseSIPResponse(self, data: bytes) -> None:
@@ -756,6 +761,8 @@ class SIPMessage:
 
     def parse_sip_response(self, data: bytes) -> None:
         headers, body = data.split(b"\r\n\r\n")
+        # print("parse sip response")
+        # print(data)
 
         headers_raw = headers.split(b"\r\n")
         self.heading = headers_raw.pop(0)
@@ -819,8 +826,9 @@ class SIPClient:
 
         self.myPort = myPort
 
-        self.default_expires = 120
+        self.default_expires = 600
         self.register_timeout = 30
+        self.cnonce_counter = 0
 
         self.inviteCounter = Counter()
         self.registerCounter = Counter()
@@ -1048,7 +1056,7 @@ class SIPClient:
 
         return response
 
-    def genAuthorization(self, request: SIPMessage) -> bytes:
+    def genAuthorization(self, request: SIPMessage) -> str:
         warnings.warn(
             "genAuthorization is deprecated "
             + "due to PEP8 compliance. Use gen_authorization instead.",
@@ -1057,8 +1065,19 @@ class SIPClient:
         )
         return self.gen_authorization(request)
 
-    def gen_authorization(self, request: SIPMessage) -> bytes:
+    def gen_authorization(self, request: SIPMessage) -> str:
         realm = request.authentication["realm"]
+        nonce = request.authentication["nonce"]
+        qop = request.authentication["qop"]
+
+        digest_params = {
+            'realm': realm,
+            'nonce': nonce,
+            'qop': qop,
+            'username': f'"{self.username}"',
+            'uri': f'"sip:{self.server};transport=UDP"',
+        }
+
         HA1 = self.username + ":" + realm + ":" + self.password
         HA1 = hashlib.md5(HA1.encode("utf8")).hexdigest()
         HA2 = (
@@ -1069,11 +1088,25 @@ class SIPClient:
             + ";transport=UDP"
         )
         HA2 = hashlib.md5(HA2.encode("utf8")).hexdigest()
-        nonce = request.authentication["nonce"]
-        response = (HA1 + ":" + nonce + ":" + HA2).encode("utf8")
-        response = hashlib.md5(response).hexdigest().encode("utf8")
 
-        return response
+        if qop == 'auth':
+            cnonce = uuid.uuid4().hex
+            self.cnonce_counter += 1
+            auth_response = (HA1 + ":" + nonce + ":" + str(self.cnonce_counter).zfill(8) + ":" + cnonce + ":auth:" + HA2).encode("utf8")
+            auth_response = hashlib.md5(auth_response).hexdigest().encode("utf8")
+            digest_params['response'] = auth_response
+            digest_params['cnonce'] = cnonce
+            digest_params['nc'] = self.cnonce_counter
+
+        else:
+            auth_response = (HA1 + ":" + nonce + ":" + HA2).encode("utf8")
+            auth_response = hashlib.md5(auth_response).hexdigest().encode("utf8")
+            digest_params['response'] = auth_response
+
+
+        digest_params = ','.join([f'{key}={value}' for key, value in digest_params.items()])
+
+        return f'Digest {digest_params}\r\n'
 
     def genBranch(self, length=32) -> str:
         """
@@ -1199,10 +1232,6 @@ class SIPClient:
         return self.gen_register(request, deregister)
 
     def gen_register(self, request: SIPMessage, deregister=False) -> str:
-        response = str(self.genAuthorization(request), "utf8")
-        nonce = request.authentication["nonce"]
-        realm = request.authentication["realm"]
-
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
         regRequest += (
             f"Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch="
@@ -1234,12 +1263,7 @@ class SIPClient:
             "Expires: "
             + f"{self.default_expires if not deregister else 0}\r\n"
         )
-        regRequest += (
-            f'Authorization: Digest username="{self.username}",'
-            + f'realm="{realm}",nonce="{nonce}",'
-            + f'uri="sip:{self.server};transport=UDP",'
-            + f'response="{response}",algorithm=MD5\r\n'
-        )
+        regRequest += f'Authorization: {self.gen_authorization(request)}\r\n'
         regRequest += "Content-Length: 0"
         regRequest += "\r\n\r\n"
 
@@ -1609,14 +1633,8 @@ class SIPClient:
         ack = self.genAck(response)
         self.out.sendto(ack.encode("utf8"), (self.server, self.port))
         debug("Acknowledged")
-        authhash = self.genAuthorization(response)
-        nonce = response.authentication["nonce"]
-        realm = response.authentication["realm"]
         auth = (
-            f'Authorization: Digest username="{self.username}",realm='
-            + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
-            + f'transport=UDP",response="{str(authhash, "utf8")}",'
-            + "algorithm=MD5\r\n"
+            f'Authorization: {self.gen_authorization(response)}\r\n'
         )
 
         invite = self.genInvite(
@@ -1653,7 +1671,7 @@ class SIPClient:
         response = SIPMessage(resp)
         response = self.trying_timeout_check(response)
 
-        if response.status == SIPStatus(401):
+        if response.status in (SIPStatus(401), SIPStatus(407)):
             # Unauthorized, likely due to being password protected.
             regRequest = self.genRegister(response, deregister=True)
             self.out.sendto(
@@ -1717,9 +1735,11 @@ class SIPClient:
             # with new urn:uuid or reply with expire 0
             self._handle_bad_request()
 
-        if response.status == SIPStatus(401):
+        if response.status in (SIPStatus(401), SIPStatus(407)):
             # Unauthorized, likely due to being password protected.
             regRequest = self.genRegister(response)
+            print("REG request")
+            print(regRequest)
             self.out.sendto(
                 regRequest.encode("utf8"), (self.server, self.port)
             )
@@ -1756,11 +1776,6 @@ class SIPClient:
                     self._handle_bad_request()
             else:
                 raise TimeoutError("Registering on SIP Server timed out")
-
-        if response.status == SIPStatus(407):
-            # Proxy Authentication Required
-            # TODO: implement
-            debug("Proxy auth required")
 
         # TODO: This must be done more reliable
         if response.status not in [
