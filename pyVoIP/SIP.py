@@ -1096,8 +1096,8 @@ class SIPClient:
             auth_response = (HA1 + ":" + nonce + ":" + cnonce_str + ":" + cnonce + ":auth:" + HA2).encode("utf8")
             auth_response = hashlib.md5(auth_response).hexdigest().encode("utf8")
             digest_params['response'] = str(auth_response, 'utf8')
-            digest_params['cnonce'] = cnonce_str
-            digest_params['nc'] = self.cnonce_counter
+            digest_params['cnonce'] = cnonce
+            digest_params['nc'] = cnonce_str
 
         else:
             auth_response = (HA1 + ":" + nonce + ":" + HA2).encode("utf8")
