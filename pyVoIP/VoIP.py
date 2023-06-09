@@ -172,7 +172,7 @@ class VoIPCall:
 
                 port = self.phone.request_port()
                 self.createRTPClients(
-                    codecs, self.myIP, port, request, i["port"]
+                    codecs, '0.0.0.0', port, request, i["port"]
                 )
         elif callstate == CallState.DIALING:
             if ms is None:
