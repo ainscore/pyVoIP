@@ -1415,6 +1415,7 @@ class SIPClient:
 
         regRequest = "SIP/2.0 200 OK\r\n"
         regRequest += self._gen_response_via_header(request)
+        regRequest += f"Record-Route: {request.headers['Record-Route']}\r\n"
         regRequest += (
             f"From: {request.headers['From']['raw']};tag="
             + f"{request.headers['From']['tag']}\r\n"
