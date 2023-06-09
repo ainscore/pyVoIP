@@ -172,7 +172,7 @@ class RTPPacketManager:
             time.sleep(0.01)
         self.bufferLock.acquire()
         packet = self.buffer.read(length)
-        if len(packet) < length:
+        if len(packet) != 0 and len(packet) < length:
             packet = packet + (b"\x80" * (length - len(packet)))
         self.bufferLock.release()
         return packet
@@ -336,7 +336,7 @@ class RTPClient:
 
     def start(self) -> None:
         self.sin = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sout = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sout = self.sin
         self.sin.bind((self.inIP, self.inPort))
         self.sin.setblocking(False)
 
@@ -350,7 +350,6 @@ class RTPClient:
     def stop(self) -> None:
         self.NSD = False
         self.sin.close()
-        self.sout.close()
 
     def read(self, length: int = 160, blocking: bool = True) -> bytes:
         if not blocking:
@@ -472,8 +471,7 @@ class RTPClient:
         return self.parse_pcmu(packet)
 
     def parse_pcmu(self, packet: RTPMessage) -> None:
-        data = audioop.ulaw2lin(packet.payload, 1)
-        data = audioop.bias(data, 1, 128)
+        data = packet.payload
         self.pmin.write(packet.timestamp, data)
 
     def encodePCMU(self, packet: bytes) -> bytes:
