@@ -1092,16 +1092,17 @@ class SIPClient:
         if qop == 'auth':
             cnonce = uuid.uuid4().hex
             self.cnonce_counter += 1
-            auth_response = (HA1 + ":" + nonce + ":" + str(self.cnonce_counter).zfill(8) + ":" + cnonce + ":auth:" + HA2).encode("utf8")
+            cnonce_str = str(self.cnonce_counter).zfill(8)
+            auth_response = (HA1 + ":" + nonce + ":" + cnonce_str + ":" + cnonce + ":auth:" + HA2).encode("utf8")
             auth_response = hashlib.md5(auth_response).hexdigest().encode("utf8")
-            digest_params['response'] = auth_response
-            digest_params['cnonce'] = cnonce
+            digest_params['response'] = str(auth_response, 'utf8')
+            digest_params['cnonce'] = cnonce_str
             digest_params['nc'] = self.cnonce_counter
 
         else:
             auth_response = (HA1 + ":" + nonce + ":" + HA2).encode("utf8")
             auth_response = hashlib.md5(auth_response).hexdigest().encode("utf8")
-            digest_params['response'] = auth_response
+            digest_params['response'] = str(auth_response, 'utf8')
 
 
         digest_params = ','.join([f'{key}={value}' for key, value in digest_params.items()])
