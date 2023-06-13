@@ -172,8 +172,8 @@ class RTPPacketManager:
             time.sleep(0.01)
         self.bufferLock.acquire()
         packet = self.buffer.read(length)
-        if len(packet) != 0 and len(packet) < length:
-            packet = packet + (b"\x80" * (length - len(packet)))
+        # if len(packet) != 0 and len(packet) < length:
+        #     packet = packet + (b"\x80" * (length - len(packet)))
         self.bufferLock.release()
         return packet
 
