@@ -442,6 +442,10 @@ class VoIPCall:
         for x in self.RTPClients:
             x.write(data)
 
+    def write_audio_sync(self, data: bytes) -> None:
+        for x in self.RTPClients:
+            x.write_sync(data)
+
     def readAudio(self, length=160, blocking=True) -> bytes:
         warnings.warn(
             "readAudio is deprecated due to PEP8 compliance. "

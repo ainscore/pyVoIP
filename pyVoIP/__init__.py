@@ -1,5 +1,7 @@
 __all__ = ["SIP", "RTP", "VoIP"]
 
+import os
+
 version_info = (1, 6, 4)
 
 __version__ = ".".join([str(x) for x in version_info])
@@ -11,7 +13,7 @@ The higher this variable is, the more often RTP packets are sent.
 This should only ever need to be 0.0. However, when testing on Windows,
 there has sometimes been jittering, setting this to 0.75 fixed this in testing.
 """
-TRANSMIT_DELAY_REDUCTION = 0.0
+TRANSMIT_DELAY_REDUCTION = os.environ.get('TRANSMIT_DELAY_REDUCTION', 0.0)
 
 
 def debug(s, e=None):

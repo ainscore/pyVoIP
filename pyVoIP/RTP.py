@@ -364,6 +364,50 @@ class RTPClient:
         self.pmout.write(self.outOffset, data)
         self.outOffset += len(data)
 
+    def write_sync(self, data: bytes) -> None:
+        current_offset = 0
+        while self.NSD and current_offset > len(data):
+            last_sent = time.monotonic_ns()
+            if current_offset + 160 > len(data):
+                payload = data[current_offset:]
+            else:
+                payload = data[current_offset:current_offset+160]
+            payload = self.encodePacket(payload)
+            packet = b"\x80"  # RFC 1889 V2 No Padding Extension or CC.
+            packet += chr(int(self.preference)).encode("utf8")
+            try:
+                packet += self.outSequence.to_bytes(2, byteorder="big")
+            except OverflowError:
+                self.outSequence = 0
+            try:
+                packet += self.outTimestamp.to_bytes(4, byteorder="big")
+            except OverflowError:
+                self.outTimestamp = 0
+            packet += self.outSSRC.to_bytes(4, byteorder="big")
+            packet += payload
+
+            # debug(payload)
+
+            try:
+                self.sout.sendto(packet, (self.outIP, self.outPort))
+            except OSError:
+                warnings.warn(
+                    "RTP Packet failed to send!",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
+            self.outSequence += 1
+            self.outTimestamp += len(payload)
+            current_offset += 160
+            # Calculate how long it took to generate this packet.
+            # Then how long we should wait to send the next, then devide by 2.
+            delay = (1 / self.preference.rate) * len(payload)
+            sleep_time = max(
+                0, delay - ((time.monotonic_ns() - last_sent) / 1000000000)
+            )
+            time.sleep(sleep_time / self.trans_delay_reduction)
+
     def recv(self) -> None:
         while self.NSD:
             try:
