@@ -333,6 +333,7 @@ class RTPClient:
         self.outSequence = random.randint(1, 100)
         self.outTimestamp = random.randint(1, 10000)
         self.outSSRC = random.randint(1000, 65530)
+        self.last_sent = 0
 
     def start(self) -> None:
         self.sin = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -364,49 +365,48 @@ class RTPClient:
         self.pmout.write(self.outOffset, data)
         self.outOffset += len(data)
 
-    def write_sync(self, data: bytes) -> None:
-        current_offset = 0
-        while self.NSD and current_offset > len(data):
-            last_sent = time.monotonic_ns()
-            if current_offset + 160 > len(data):
-                payload = data[current_offset:]
-            else:
-                payload = data[current_offset:current_offset+160]
-            payload = self.encodePacket(payload)
-            packet = b"\x80"  # RFC 1889 V2 No Padding Extension or CC.
-            packet += chr(int(self.preference)).encode("utf8")
-            try:
-                packet += self.outSequence.to_bytes(2, byteorder="big")
-            except OverflowError:
-                self.outSequence = 0
-            try:
-                packet += self.outTimestamp.to_bytes(4, byteorder="big")
-            except OverflowError:
-                self.outTimestamp = 0
-            packet += self.outSSRC.to_bytes(4, byteorder="big")
-            packet += payload
+    def write_sync(self, stream: io.BytesIO, bytes: int, timeout=None) -> None:
+        if not self.NSD:
+            return
+        payload = stream.read(bytes, timeout=timeout)
+        # print(len(payload))
+        payload = self.encodePacket(payload)
+        packet = b"\x80"  # RFC 1889 V2 No Padding Extension or CC.
+        packet += chr(int(self.preference)).encode("utf8")
+        try:
+            packet += self.outSequence.to_bytes(2, byteorder="big")
+        except OverflowError:
+            self.outSequence = 0
+        try:
+            packet += self.outTimestamp.to_bytes(4, byteorder="big")
+        except OverflowError:
+            self.outTimestamp = 0
+        packet += self.outSSRC.to_bytes(4, byteorder="big")
+        packet += payload
 
-            # debug(payload)
+        # debug(payload)
 
-            try:
-                self.sout.sendto(packet, (self.outIP, self.outPort))
-            except OSError:
-                warnings.warn(
-                    "RTP Packet failed to send!",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-            self.outSequence += 1
-            self.outTimestamp += len(payload)
-            current_offset += 160
-            # Calculate how long it took to generate this packet.
-            # Then how long we should wait to send the next, then devide by 2.
-            delay = (1 / self.preference.rate) * len(payload)
-            sleep_time = max(
-                0, delay - ((time.monotonic_ns() - last_sent) / 1000000000)
+        try:
+            self.sout.sendto(packet, (self.outIP, self.outPort))
+        except OSError:
+            warnings.warn(
+                "RTP Packet failed to send!",
+                RuntimeWarning,
+                stacklevel=2,
             )
-            time.sleep(sleep_time / self.trans_delay_reduction)
+        last_sent = time.monotonic_ns()
+
+        sleep_time = max(0.0, len(payload) / 8000 - .01, 1 / 20 - (time.monotonic_ns() - self.last_sent) / 1000000000)
+        print(
+            f"wrote {len(payload)} bytes, waiting {sleep_time}, vs {(time.monotonic_ns() - self.last_sent) / 1000000000}")
+
+        self.last_sent = last_sent
+        # sleep_time = .02
+        # print(f"sleep time: {sleep_time}")
+        time.sleep(sleep_time)
+
+        self.outSequence += 1
+        self.outTimestamp += len(payload)
 
     def recv(self) -> None:
         while self.NSD:
