@@ -443,9 +443,9 @@ class VoIPCall:
         for x in self.RTPClients:
             x.write(data)
 
-    def write_audio_sync(self, stream: io.BytesIO, event:threading.Event=None, timeout=None) -> None:
+    def write_audio_sync(self, stream: io.BytesIO, event:threading.Event=None, timeout=None, noblock:bool=False) -> None:
         for x in self.RTPClients:
-            x.write_sync(stream, event, timeout)
+            x.write_sync(stream, event, timeout, noblock)
 
     def readAudio(self, length=160, blocking=True) -> bytes:
         warnings.warn(
