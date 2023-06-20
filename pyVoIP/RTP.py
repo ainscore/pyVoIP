@@ -344,9 +344,9 @@ class RTPClient:
         r = Timer(0, self.recv)
         r.name = "RTP Receiver"
         r.start()
-        t = Timer(0, self.trans)
-        t.name = "RTP Transmitter"
-        t.start()
+        # t = Timer(0, self.trans)
+        # t.name = "RTP Transmitter"
+        # t.start()
 
     def stop(self) -> None:
         self.NSD = False
