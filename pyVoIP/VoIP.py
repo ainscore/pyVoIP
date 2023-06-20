@@ -1,3 +1,4 @@
+import threading
 from enum import Enum
 from pyVoIP import SIP, RTP
 from threading import Timer, Lock
@@ -442,9 +443,9 @@ class VoIPCall:
         for x in self.RTPClients:
             x.write(data)
 
-    def write_audio_sync(self, stream: io.BytesIO, bytes:int, timeout=None) -> None:
+    def write_audio_sync(self, stream: io.BytesIO, event:threading.Event=None, timeout=None) -> None:
         for x in self.RTPClients:
-            x.write_sync(stream, bytes, timeout)
+            x.write_sync(stream, event, timeout)
 
     def readAudio(self, length=160, blocking=True) -> bytes:
         warnings.warn(
