@@ -377,8 +377,7 @@ class RTPClient:
             else:
                 payload = stream.read(160, timeout=timeout)
             if interrupt_event is not None and interrupt_event.is_set():
-                continue
-            print(len(payload))
+                return
             payload = self.encodePacket(payload)
             packet = b"\x80"  # RFC 1889 V2 No Padding Extension or CC.
             packet += chr(int(self.preference)).encode("utf8")
@@ -402,11 +401,7 @@ class RTPClient:
             sleep_time = max(0.0, len(payload) / 8000 - since_last_sent, 1 / 50 - since_last_sent)
             if packets_per_second < 49:
                 sleep_time = 0
-            print(
-                f"writing {len(payload)} bytes, waiting {sleep_time}, vs {(time.monotonic_ns() - self.last_sent) / 1000000000}")
 
-            # sleep_time = .02
-            # print(f"sleep time: {sleep_time}")
             time.sleep(sleep_time)
             total_packets += 1
 
